@@ -42,7 +42,7 @@ export interface ChannelData {
   name: string; // Optimizer (优化师)
   leadName: string; // Optimizer Lead (优化师组长)
   platform: 'fb' | 'tk';
-  type: 'self' | 'dist';
+  type: 'self' | 'dist' | 'natural';
   recharge: number;
   rechargeUsers: number;
   newRecharge: number;
@@ -57,6 +57,7 @@ export interface ChannelData {
   dramaId: string;
   language: string;
   department: string;
+  rechargeType: '200金币' | '300金币' | '包月会员' | '包月会员(会员续订)' | '包周会员' | '包周会员(会员续订)';
 }
 
 export interface DistributorData {
@@ -143,7 +144,7 @@ export interface RealtimeMetrics {
   conversionRate: number;
 }
 
-export const getRealtimeMetrics = (timezone: Timezone, currency: Currency, period: string): RealtimeMetrics => {
+export const getRealtimeMetrics = (timezone: Timezone, currency: Currency, period: string, clientFilter: string = 'all', packageFilter: string = 'all'): RealtimeMetrics => {
   const tzMultiplier = timezone === 'Asia/Shanghai' ? 1.2 : timezone === 'UTC' ? 1.0 : 0.8;
   const currencyRate = currency === 'CNY' ? 7.2 : 1;
   let multiplier = 1;
@@ -155,7 +156,21 @@ export const getRealtimeMetrics = (timezone: Timezone, currency: Currency, perio
     case 'lastMonth': multiplier = 30; break;
   }
 
-  const base = multiplier * tzMultiplier * currencyRate;
+  let filterMultiplier = 1;
+  if (clientFilter !== 'all') {
+    if (clientFilter === 'ios') filterMultiplier *= 0.45;
+    else if (clientFilter === 'android') filterMultiplier *= 0.35;
+    else if (clientFilter === 'h5') filterMultiplier *= 0.15;
+    else if (clientFilter === 'miniapp') filterMultiplier *= 0.05;
+  }
+  if (packageFilter !== 'all') {
+    if (packageFilter === 'yoo') filterMultiplier *= 0.50;
+    else if (packageFilter === 'manseen') filterMultiplier *= 0.30;
+    else if (packageFilter === 'packageA') filterMultiplier *= 0.12;
+    else if (packageFilter === 'packageB') filterMultiplier *= 0.08;
+  }
+
+  const base = multiplier * tzMultiplier * currencyRate * filterMultiplier;
   
   const selfSpend = Math.round((Math.random() * 3000 + 2000) * base);
   const selfRoi = +(Math.random() * 0.5 + 1.0).toFixed(2);
@@ -168,12 +183,12 @@ export const getRealtimeMetrics = (timezone: Timezone, currency: Currency, perio
   const totalRecharge = selfRecharge + distRecharge;
   const netRevenue = selfNetRevenue + distNetRevenue;
 
-  const rechargeUsers = Math.round((Math.random() * 500 + 200) * multiplier * tzMultiplier);
+  const rechargeUsers = Math.max(1, Math.round((Math.random() * 500 + 200) * multiplier * tzMultiplier * filterMultiplier));
   const arpu = totalRecharge / rechargeUsers;
-  const activeUsers = Math.round(rechargeUsers * (Math.random() * 5 + 10));
-  const viewingUsers = Math.round(activeUsers * (Math.random() * 0.3 + 0.5));
-  const intentUsers = Math.round(viewingUsers * (Math.random() * 0.4 + 0.2));
-  const conversionRate = (rechargeUsers / intentUsers) * 100;
+  const activeUsers = Math.max(1, Math.round(rechargeUsers * (Math.random() * 5 + 10)));
+  const viewingUsers = Math.max(1, Math.round(activeUsers * (Math.random() * 0.3 + 0.5)));
+  const intentUsers = Math.max(1, Math.round(viewingUsers * (Math.random() * 0.4 + 0.2)));
+  const conversionRate = intentUsers > 0 ? (rechargeUsers / intentUsers) * 100 : 0;
 
   const newPayingUsers = Math.round(rechargeUsers * (Math.random() * 0.3 + 0.1));
   const newPayingAmount = Math.round(newPayingUsers * arpu * (Math.random() * 0.5 + 0.8));
@@ -214,8 +229,22 @@ export const getActiveUserAppDistribution = (date: 'today' | 'yesterday' = 'toda
   ];
 };
 
-export const getAppData = (date: 'today' | 'yesterday' = 'today') => {
-  const m = date === 'today' ? 1 : 0.85;
+export const getAppData = (date: 'today' | 'yesterday' = 'today', clientFilter: string = 'all', packageFilter: string = 'all') => {
+  let m = date === 'today' ? 1 : 0.85;
+  
+  if (clientFilter !== 'all') {
+    if (clientFilter === 'ios') m *= 0.45;
+    else if (clientFilter === 'android') m *= 0.35;
+    else if (clientFilter === 'h5') m *= 0.15;
+    else if (clientFilter === 'miniapp') m *= 0.05;
+  }
+  if (packageFilter !== 'all') {
+    if (packageFilter === 'yoo') m *= 0.50;
+    else if (packageFilter === 'manseen') m *= 0.30;
+    else if (packageFilter === 'packageA') m *= 0.12;
+    else if (packageFilter === 'packageB') m *= 0.08;
+  }
+
   return {
     clients: [
       { name: 'iOS', value: 45 },
@@ -229,19 +258,35 @@ export const getAppData = (date: 'today' | 'yesterday' = 'today') => {
       { name: '马甲包A', value: 12 },
       { name: '马甲包B', value: 8 },
     ],
-    payments: [
-      { name: 'Apple Pay', value: Math.round(40 * m) },
-      { name: 'Google Pay', value: Math.round(30 * m) },
-      { name: 'Credit Card', value: Math.round(20 * m) },
-      { name: 'PayPal', value: Math.round(10 * m) },
+    rechargeTypes: [
+      { name: '200金币', percentage: 30, amount: 30000 * m },
+      { name: '300金币', percentage: 25, amount: 25000 * m },
+      { name: '包月会员', percentage: 15, amount: 15000 * m },
+      { name: '包月会员（续订）', percentage: 15, amount: 15000 * m },
+      { name: '包周会员', percentage: 8, amount: 8000 * m },
+      { name: '包周会员（续订）', percentage: 7, amount: 7000 * m },
     ]
   };
 };
 
-export const getRegionData = (currency: Currency, date: 'today' | 'yesterday' = 'today') => {
+export const getRegionData = (currency: Currency, date: 'today' | 'yesterday' = 'today', clientFilter: string = 'all', packageFilter: string = 'all') => {
   const rate = currency === 'CNY' ? 7.2 : 1;
-  const m = date === 'today' ? 1 : 0.92;
-  return [
+  let m = date === 'today' ? 1 : 0.92;
+  
+  if (clientFilter !== 'all') {
+    if (clientFilter === 'ios') m *= 0.45;
+    else if (clientFilter === 'android') m *= 0.35;
+    else if (clientFilter === 'h5') m *= 0.15;
+    else if (clientFilter === 'miniapp') m *= 0.05;
+  }
+  if (packageFilter !== 'all') {
+    if (packageFilter === 'yoo') m *= 0.50;
+    else if (packageFilter === 'manseen') m *= 0.30;
+    else if (packageFilter === 'packageA') m *= 0.12;
+    else if (packageFilter === 'packageB') m *= 0.08;
+  }
+
+  const allData = [
     { name: 'US', label: '美国', value: 4500 * rate * m },
     { name: 'UK', label: '英国', value: 2100 * rate * m },
     { name: 'AU', label: '澳大利亚', value: 1800 * rate * m },
@@ -250,6 +295,31 @@ export const getRegionData = (currency: Currency, date: 'today' | 'yesterday' = 
     { name: 'MY', label: '马来西亚', value: 600 * rate * m },
     { name: 'ID', label: '印尼', value: 450 * rate * m },
     { name: 'TH', label: '泰国', value: 300 * rate * m },
+    { name: 'DE', label: '德国', value: 250 * rate * m },
+    { name: 'FR', label: '法国', value: 200 * rate * m },
+    { name: 'JP', label: '日本', value: 180 * rate * m },
+    { name: 'KR', label: '韩国', value: 150 * rate * m },
+    { name: 'BR', label: '巴西', value: 120 * rate * m },
+    { name: 'MX', label: '墨西哥', value: 100 * rate * m },
+    { name: 'IN', label: '印度', value: 90 * rate * m },
+    { name: 'IT', label: '意大利', value: 80 * rate * m },
+    { name: 'ES', label: '西班牙', value: 70 * rate * m },
+    { name: 'NL', label: '荷兰', value: 60 * rate * m },
+    { name: 'SE', label: '瑞典', value: 50 * rate * m },
+    { name: 'CH', label: '瑞士', value: 40 * rate * m },
+    { name: 'BE', label: '比利时', value: 30 * rate * m },
+    { name: 'NO', label: '挪威', value: 20 * rate * m },
+    { name: 'FI', label: '芬兰', value: 10 * rate * m },
+  ];
+
+  if (allData.length <= 20) return allData;
+
+  const top20 = allData.slice(0, 20);
+  const others = allData.slice(20).reduce((acc, curr) => acc + curr.value, 0);
+
+  return [
+    ...top20,
+    { name: 'OTH', label: '其他', value: others },
   ];
 };
 
@@ -391,8 +461,8 @@ export const getDramaRankings = (currency: Currency, languageFilter: string = 'A
   if (languageFilter === 'ALL') return allDramas;
 
   return {
-    trending: allDramas.trending.filter(d => d.language === languageFilter),
-    new: allDramas.new.filter(d => d.language === languageFilter),
+    trending: allDramas.trending.filter(d => d.language === languageFilter).slice(0, 5),
+    new: allDramas.new.filter(d => d.language === languageFilter).slice(0, 5),
   };
 };
 
@@ -414,7 +484,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       spend: 100000 * rate * m, roi: 1.50, netRevenue: 127500 * rate * m,
       promoLinkCount: 45, optimizerCount: 3,
       dramaName: 'Billionaire\'s Secret Wife', dramaId: '1001', language: '英语',
-      department: '深圳--市场部'
+      department: '深圳--市场部',
+      rechargeType: '包周会员'
     },
     { 
       id: 'CH002', name: '李娜', leadName: '张强', platform: 'tk', type: 'self', 
@@ -423,7 +494,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       spend: 85000 * rate * m, roi: 1.41, netRevenue: 102000 * rate * m,
       promoLinkCount: 38, optimizerCount: 2,
       dramaName: 'Alpha\'s Rejected Mate', dramaId: '1002', language: '英语',
-      department: '深圳--市场部'
+      department: '深圳--市场部',
+      rechargeType: '300金币'
     },
     { 
       id: 'CH003', name: '王明', leadName: '李华', platform: 'fb', type: 'self', 
@@ -432,7 +504,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       spend: 75000 * rate * m, roi: 1.26, netRevenue: 80750 * rate * m,
       promoLinkCount: 25, optimizerCount: 2,
       dramaName: 'The CEO\'s Contract', dramaId: '1004', language: '英语',
-      department: '广州--市场部'
+      department: '广州--市场部',
+      rechargeType: '包月会员'
     },
     { 
       id: 'CH004', name: '刘芳', leadName: '李华', platform: 'tk', type: 'self', 
@@ -441,7 +514,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       spend: 50000 * rate * m, roi: 1.60, netRevenue: 68000 * rate * m,
       promoLinkCount: 30, optimizerCount: 1,
       dramaName: 'Billionaire\'s Secret Wife', dramaId: '1001', language: '英语',
-      department: '广州--市场部'
+      department: '广州--市场部',
+      rechargeType: '200金币'
     },
     { 
       id: 'CH005', name: '金大卫', leadName: '李华', platform: 'fb', type: 'self', 
@@ -450,7 +524,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       spend: 55000 * rate * m, roi: 1.09, netRevenue: 51000 * rate * m,
       promoLinkCount: 15, optimizerCount: 1,
       dramaName: 'Alpha\'s Rejected Mate', dramaId: '1002', language: '英语',
-      department: '广州--市场部'
+      department: '广州--市场部',
+      rechargeType: '包周会员(会员续订)'
     },
     { 
       id: 'CH006', name: '分销商Alpha', leadName: '赵敏', platform: 'fb', type: 'dist', 
@@ -459,7 +534,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       netRevenue: 87500 * rate * m, activeUsers: Math.floor(12500 * m),
       promoLinkCount: 125, optimizerCount: 12,
       dramaName: 'The CEO\'s Contract', dramaId: '1004', language: '英语',
-      department: '分销--分销公司1'
+      department: '分销--分销公司1',
+      rechargeType: '包月会员(会员续订)'
     },
     { 
       id: 'CH007', name: '全球媒体网络', leadName: '孙悦', platform: 'tk', type: 'dist', 
@@ -468,7 +544,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       netRevenue: 63000 * rate * m, activeUsers: Math.floor(9800 * m),
       promoLinkCount: 98, optimizerCount: 8,
       dramaName: 'Billionaire\'s Secret Wife', dramaId: '1001', language: '英语',
-      department: '分销--分销公司2'
+      department: '分销--分销公司2',
+      rechargeType: '300金币'
     },
     { 
       id: 'CH008', name: '短剧推广公司', leadName: '赵敏', platform: 'fb', type: 'dist', 
@@ -477,7 +554,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       netRevenue: 42000 * rate * m, activeUsers: Math.floor(6500 * m),
       promoLinkCount: 75, optimizerCount: 6,
       dramaName: 'Alpha\'s Rejected Mate', dramaId: '1002', language: '英语',
-      department: '分销--分销公司1'
+      department: '分销--分销公司1',
+      rechargeType: '200金币'
     },
     { 
       id: 'CH009', name: '亚洲触达', leadName: '孙悦', platform: 'tk', type: 'dist', 
@@ -486,7 +564,8 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       netRevenue: 31500 * rate * m, activeUsers: Math.floor(4200 * m),
       promoLinkCount: 42, optimizerCount: 4,
       dramaName: 'El Amor del CEO', dramaId: '1003', language: '西班牙语',
-      department: '分销--分销公司2'
+      department: '分销--分销公司2',
+      rechargeType: '包周会员'
     },
     { 
       id: 'CH010', name: '欧洲流媒体', leadName: '赵敏', platform: 'fb', type: 'dist', 
@@ -495,7 +574,18 @@ export const getChannelData = (currency: Currency, date: 'today' | 'yesterday' |
       netRevenue: 22750 * rate * m, activeUsers: Math.floor(3100 * m),
       promoLinkCount: 31, optimizerCount: 3,
       dramaName: 'El Amor del CEO', dramaId: '1003', language: '西班牙语',
-      department: '分销--分销公司1'
+      department: '分销--分销公司1',
+      rechargeType: '包月会员'
+    },
+    { 
+      id: 'CH011', name: '自然流量', leadName: '-', platform: 'fb', type: 'natural', 
+      recharge: 30000 * rate * m, rechargeUsers: 250, 
+      newRecharge: 5000 * rate * m, newRechargeUsers: 40,
+      netRevenue: 25500 * rate * m, activeUsers: Math.floor(1500 * m),
+      promoLinkCount: 0, optimizerCount: 0,
+      dramaName: 'Billionaire\'s Secret Wife', dramaId: '1001', language: '英语',
+      department: '自然流量',
+      rechargeType: '200金币'
     },
   ];
 
@@ -540,9 +630,23 @@ export const getLtvData = (currency: Currency, days: number = 7): LtvData[] => {
   return data;
 };
 
-export const getHourlyRechargeData = (currency: Currency): HourlyData[] => {
+export const getHourlyRechargeData = (currency: Currency, clientFilter: string = 'all', packageFilter: string = 'all'): HourlyData[] => {
   const rate = currency === 'CNY' ? 7.2 : 1;
   const data: HourlyData[] = [];
+  
+  let filterMultiplier = 1;
+  if (clientFilter !== 'all') {
+    if (clientFilter === 'ios') filterMultiplier *= 0.45;
+    else if (clientFilter === 'android') filterMultiplier *= 0.35;
+    else if (clientFilter === 'h5') filterMultiplier *= 0.15;
+    else if (clientFilter === 'miniapp') filterMultiplier *= 0.05;
+  }
+  if (packageFilter !== 'all') {
+    if (packageFilter === 'yoo') filterMultiplier *= 0.50;
+    else if (packageFilter === 'manseen') filterMultiplier *= 0.30;
+    else if (packageFilter === 'packageA') filterMultiplier *= 0.12;
+    else if (packageFilter === 'packageB') filterMultiplier *= 0.08;
+  }
   
   // Simulate a typical 24-hour curve (peak around evening)
   for (let i = 0; i < 24; i++) {
@@ -562,8 +666,8 @@ export const getHourlyRechargeData = (currency: Currency): HourlyData[] => {
     
     data.push({
       hour,
-      today: Math.round(todayBase * todayVariance * rate),
-      yesterday: Math.round(base * yesterdayVariance * rate)
+      today: Math.round(todayBase * todayVariance * rate * filterMultiplier),
+      yesterday: Math.round(base * yesterdayVariance * rate * filterMultiplier)
     });
   }
   return data;

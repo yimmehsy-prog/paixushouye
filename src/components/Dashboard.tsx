@@ -37,11 +37,10 @@ const DashboardSection: React.FC<{ id: string, children: React.ReactNode, classN
       <div className="relative group h-full">
         <div 
           onPointerDown={(e) => dragControls.start(e)}
-          className="absolute top-4 right-4 z-20 p-1.5 rounded-md bg-white/80 backdrop-blur-sm border border-slate-200 shadow-sm hover:bg-slate-100 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center gap-1.5"
+          className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-white/80 backdrop-blur-sm border border-slate-200 shadow-sm hover:bg-slate-100 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center gap-1.5"
           title="拖动调整位置"
         >
           <GripVertical className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">DRAG</span>
         </div>
         {children}
       </div>
@@ -83,7 +82,7 @@ export default function Dashboard() {
 
   const [hiddenSections, setHiddenSections] = useState<string[]>(() => {
     const saved = localStorage.getItem('dashboard_hidden_sections_v3');
-    return saved ? JSON.parse(saved) : ['app-funnel'];
+    return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
@@ -103,10 +102,8 @@ export default function Dashboard() {
           // Find original index based on default order to insert it in a reasonable place
           const defaultOrder = Object.keys(sectionNames);
           const newOrder = [...prev];
-          const defaultIndex = defaultOrder.indexOf(sectionId);
           
-          // Simple insertion: just push to end for now, or you could try to insert at original index
-          // For simplicity and reliability, appending to the end is safest
+          // Simple insertion: just push to end for now
           newOrder.push(sectionId);
           
           // Sort based on default order to maintain logical flow
@@ -121,11 +118,24 @@ export default function Dashboard() {
     }
   };
 
+  const moveSection = (sectionId: string, direction: 'up' | 'down') => {
+    setSectionOrder(prev => {
+      const index = prev.indexOf(sectionId);
+      if (index === -1) return prev;
+      const newOrder = [...prev];
+      if (direction === 'up' && index > 0) {
+        [newOrder[index], newOrder[index - 1]] = [newOrder[index - 1], newOrder[index]];
+      } else if (direction === 'down' && index < newOrder.length - 1) {
+        [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      }
+      return newOrder;
+    });
+  };
+
   const sectionNames: Record<string, string> = {
     'realtime-metrics': '实时数据',
     'charts-row': '趋势图表',
     'rankings-row': '排行榜',
-    'app-funnel': '应用活跃与转化漏斗',
     'distributor-ranking': '渠道充值排行',
     'monthly-lead-ranking': '优化师组长月度排行'
   };
@@ -182,9 +192,9 @@ export default function Dashboard() {
   }, [monthlyRawChannelData]);
 
   const distributors = getDistributorData(currency, distributorMonth);
-  const hourlyData = getHourlyRechargeData(currency);
-  const regionData = getRegionData(currency, distributionDate);
-  const appData = getAppData(distributionDate);
+  const hourlyData = getHourlyRechargeData(currency, clientFilter, packageFilter);
+  const regionData = getRegionData(currency, distributionDate, clientFilter, packageFilter);
+  const appData = getAppData(distributionDate, clientFilter, packageFilter);
   const hourlyActiveUserData = getHourlyActiveUserData();
   const activeUserAppDistribution = getActiveUserAppDistribution(appFunnelDate);
 
@@ -219,7 +229,7 @@ export default function Dashboard() {
   }, [hourlyData]);
 
   useEffect(() => {
-    setRealtimeData(getRealtimeMetrics(timezone, currency, realtimePeriod));
+    setRealtimeData(getRealtimeMetrics(timezone, currency, realtimePeriod, clientFilter, packageFilter));
   }, [timezone, currency, clientFilter, packageFilter, realtimePeriod]);
 
   const renderRealtimeMetrics = () => (
@@ -502,9 +512,9 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-slate-500 font-medium">充值(自投/分销):</span>
-                    <span className="font-mono font-bold text-indigo-600">{formatCurrency(drama.selfRecharge, currency)}</span>
+                    <span className="font-mono font-bold text-slate-900">{formatCurrency(drama.selfRecharge, currency)}</span>
                     <span className="text-slate-300">/</span>
-                    <span className="font-mono font-bold text-emerald-600">{formatCurrency(drama.distRecharge, currency)}</span>
+                    <span className="font-mono font-bold text-slate-900">{formatCurrency(drama.distRecharge, currency)}</span>
                   </div>
                 </div>
               </div>
@@ -539,8 +549,8 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%" minHeight={320}>
           <AreaChart data={rechargeChartType === 'cumulative' ? cumulativeHourlyData : hourlyData} margin={{ top: 10, right: 20, bottom: 0, left: -10 }}>
             <defs>
               <linearGradient id="colorToday" x1="0" y1="0" x2="0" y2="1">
@@ -583,12 +593,12 @@ export default function Dashboard() {
 
   const renderDistributionAnalysis = () => (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+      <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 bg-slate-50/50">
         <div className="flex items-center gap-2">
           <Activity className="w-5 h-5 text-indigo-500" />
           <h3 className="font-bold text-slate-800">分布分析</h3>
         </div>
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 flex-shrink-0">
           <button
             onClick={() => setDistributionDate('today')}
             className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${distributionDate === 'today' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
@@ -610,8 +620,8 @@ export default function Dashboard() {
             <Map className="w-4 h-4 text-slate-500" />
             <h4 className="text-sm font-semibold text-slate-700">注册国家充值分布</h4>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%" minHeight={320}>
               <BarChart
                 layout="vertical"
                 data={regionData}
@@ -654,32 +664,35 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-2 mb-6">
             <CreditCard className="w-4 h-4 text-slate-500" />
-            <h4 className="text-sm font-semibold text-slate-700">支付方式分布</h4>
+            <h4 className="text-sm font-semibold text-slate-700">充值明细</h4>
           </div>
-          <div className="h-64">
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={appData.payments}
+                  data={appData.rechargeTypes}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
                   outerRadius={80}
                   paddingAngle={5}
-                  dataKey="value"
+                  dataKey="percentage"
                   nameKey="name"
                 >
-                  {appData.payments.map((entry, index) => (
+                  {appData.rechargeTypes.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip 
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`${value}%`, '占比']}
+                  formatter={(value: number, name: string, props: any) => [
+                    `${value}% (${formatCurrency(props.payload.amount, currency)})`, 
+                    props.payload.name
+                  ]}
                 />
                 <Legend 
                   verticalAlign="bottom" 
-                  height={36}
+                  height={80}
                   iconType="circle"
                   formatter={(value) => <span className="text-[10px] text-slate-600 font-medium">{value}</span>}
                 />
@@ -849,7 +862,7 @@ export default function Dashboard() {
             <tr>
               <th className="px-4 py-3 whitespace-nowrap">渠道ID</th>
               <th className="px-4 py-3 whitespace-nowrap">优化师信息</th>
-              <th className="px-4 py-3 whitespace-nowrap">平台</th>
+              <th className="px-4 py-3 whitespace-nowrap">推广媒体</th>
               <th className="px-4 py-3 whitespace-nowrap">类型</th>
               <th className="px-4 py-3 whitespace-nowrap">剧名/ID/语言</th>
               <th className="px-4 py-3 whitespace-nowrap text-right">充值金额/人数</th>
@@ -893,12 +906,12 @@ export default function Dashboard() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex flex-col items-end">
-                    <span className="font-mono text-blue-600 font-medium">{formatCurrency(item.recharge, currency)}</span>
+                    <span className="font-mono text-slate-900 font-medium">{formatCurrency(item.recharge, currency)}</span>
                     <span className="text-[10px] text-slate-400">{item.rechargeUsers.toLocaleString()}人</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-amber-600">{item.spend ? formatCurrency(item.spend, currency) : '-'}</td>
-                <td className="px-4 py-3 text-right font-mono text-teal-600 font-semibold">{formatCurrency(item.netRevenue, currency)}</td>
+                <td className="px-4 py-3 text-right font-mono text-slate-900">{item.spend ? formatCurrency(item.spend, currency) : '-'}</td>
+                <td className="px-4 py-3 text-right font-mono text-slate-900 font-semibold">{formatCurrency(item.netRevenue, currency)}</td>
                 <td className="px-4 py-3 text-right font-mono">
                   {item.roi ? (
                     <span className={`px-2 py-1 rounded text-xs font-bold ${item.roi >= 1.3 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
@@ -971,7 +984,7 @@ export default function Dashboard() {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-50/50 gap-4">
         <div className="flex items-center gap-2">
-          <Award className="w-5 h-5 text-indigo-500" />
+          <Award className="w-5 h-5 text-amber-500" />
           <h3 className="font-bold text-slate-800">优化师组长月度排行</h3>
         </div>
         <div className="flex items-center gap-4">
@@ -989,19 +1002,26 @@ export default function Dashboard() {
             </select>
           </div>
           <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-bold border border-indigo-100 uppercase tracking-wider">自投数据</span>
+          <div 
+            onPointerDown={(e) => dragControls.start(e)}
+            className="p-1 rounded-md hover:bg-slate-100 cursor-grab active:cursor-grabbing transition-colors"
+            title="拖动调整位置"
+          >
+            <GripVertical className="w-4 h-4 text-slate-400" />
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-100">
+          <thead className="bg-slate-50 text-slate-900 font-medium border-b border-slate-100">
             <tr>
               <th className="px-4 py-3 whitespace-nowrap">排名</th>
               <th className="px-4 py-3 whitespace-nowrap">组长姓名</th>
               <th className="px-4 py-3 whitespace-nowrap">部门</th>
               <th className="px-4 py-3 whitespace-nowrap text-right">充值金额</th>
               <th className="px-4 py-3 whitespace-nowrap text-right">消耗</th>
-              <th className="px-4 py-3 whitespace-nowrap text-right text-indigo-600">推广链数量</th>
-              <th className="px-4 py-3 whitespace-nowrap text-right text-indigo-600">投手数量</th>
+              <th className="px-4 py-3 whitespace-nowrap text-right text-indigo-700">推广链数量</th>
+              <th className="px-4 py-3 whitespace-nowrap text-right text-indigo-700">投手数量</th>
               <th className="px-4 py-3 whitespace-nowrap text-right">ROI</th>
             </tr>
           </thead>
@@ -1020,12 +1040,12 @@ export default function Dashboard() {
                 </td>
                 <td className="px-4 py-3 font-bold text-slate-800">{lead.name}</td>
                 <td className="px-4 py-3 text-slate-500">{lead.department}</td>
-                <td className="px-4 py-3 text-right font-mono text-blue-600 font-medium">{formatCurrency(lead.recharge, currency)}</td>
-                <td className="px-4 py-3 text-right font-mono text-amber-600">{formatCurrency(lead.spend, currency)}</td>
-                <td className="px-4 py-3 text-right font-mono font-bold text-indigo-600">{lead.promoLinkCount}</td>
-                <td className="px-4 py-3 text-right font-mono font-bold text-indigo-600">{lead.optimizerCount}</td>
+                <td className="px-4 py-3 text-right font-mono text-slate-900">{formatCurrency(lead.recharge, currency)}</td>
+                <td className="px-4 py-3 text-right font-mono text-slate-900">{formatCurrency(lead.spend, currency)}</td>
+                <td className="px-4 py-3 text-right font-mono font-bold text-indigo-700">{lead.promoLinkCount}</td>
+                <td className="px-4 py-3 text-right font-mono font-bold text-indigo-700">{lead.optimizerCount}</td>
                 <td className="px-4 py-3 text-right">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${lead.roi >= 1.3 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                  <span className={`px-2 py-1 rounded text-xs font-bold ${lead.roi >= 1.3 ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-white'}`}>
                     {lead.roi.toFixed(2)}
                   </span>
                 </td>
@@ -1050,42 +1070,6 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-lg font-bold text-slate-800">实时大盘数据</h2>
-              </div>
-              
-              <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
-
-              <div className="flex items-center gap-4">
-                {/* Client Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">客户端:</span>
-                  <select
-                    value={clientFilter}
-                    onChange={(e) => setClientFilter(e.target.value)}
-                    className="bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded px-2 py-1 focus:outline-none cursor-pointer hover:border-indigo-300 transition-colors"
-                  >
-                    <option value="all">全部</option>
-                    <option value="ios">iOS端</option>
-                    <option value="android">安卓端</option>
-                    <option value="h5">H5</option>
-                    <option value="miniapp">小程序</option>
-                  </select>
-                </div>
-
-                {/* Package Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">应用:</span>
-                  <select
-                    value={packageFilter}
-                    onChange={(e) => setPackageFilter(e.target.value)}
-                    className="bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded px-2 py-1 focus:outline-none cursor-pointer hover:border-indigo-300 transition-colors"
-                  >
-                    <option value="all">全部</option>
-                    <option value="yoo">yoo包</option>
-                    <option value="manseen">manseen包</option>
-                    <option value="packageA">马甲包A</option>
-                    <option value="packageB">马甲包B</option>
-                  </select>
-                </div>
               </div>
             </div>
             <div className="flex items-center bg-slate-100 p-1 rounded-md border border-slate-200">
@@ -1194,32 +1178,32 @@ export default function Dashboard() {
                 {/* 1. 自投充值金额 */}
                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex flex-col justify-center">
                   <div className="text-xs text-slate-500 mb-1 font-medium whitespace-nowrap">自投充值金额</div>
-                  <div className="text-lg font-bold font-mono text-slate-800 truncate">{formatCurrency(realtimeData.selfRecharge, currency)}</div>
+                  <div className="text-lg font-bold font-mono text-slate-900 truncate">{formatCurrency(realtimeData.selfRecharge, currency)}</div>
                 </div>
                 {/* 2. 自投消耗 */}
                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex flex-col justify-center">
                   <div className="text-xs text-slate-500 mb-1 font-medium whitespace-nowrap">自投消耗</div>
-                  <div className="text-lg font-bold font-mono text-slate-800 truncate">{formatCurrency(realtimeData.selfSpend, currency)}</div>
+                  <div className="text-lg font-bold font-mono text-slate-900 truncate">{formatCurrency(realtimeData.selfSpend, currency)}</div>
                 </div>
                 {/* 3. 自投roi */}
                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex flex-col justify-center">
                   <div className="text-xs text-slate-500 mb-1 font-medium whitespace-nowrap">自投roi</div>
-                  <div className="text-lg font-bold font-mono text-slate-800 truncate">{realtimeData.selfRoi.toFixed(2)}</div>
+                  <div className="text-lg font-bold font-mono text-slate-900 truncate">{realtimeData.selfRoi.toFixed(2)}</div>
                 </div>
                 {/* 4. 自投预计实收 */}
                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex flex-col justify-center">
                   <div className="text-xs text-slate-500 mb-1 font-medium whitespace-nowrap">自投预计实收</div>
-                  <div className="text-lg font-bold font-mono text-slate-800 truncate">{formatCurrency(realtimeData.selfNetRevenue, currency)}</div>
+                  <div className="text-lg font-bold font-mono text-slate-900 truncate">{formatCurrency(realtimeData.selfNetRevenue, currency)}</div>
                 </div>
                 {/* 5. 分销充值金额 */}
                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex flex-col justify-center">
                   <div className="text-xs text-slate-500 mb-1 font-medium whitespace-nowrap">分销充值金额</div>
-                  <div className="text-lg font-bold font-mono text-slate-800 truncate">{formatCurrency(realtimeData.distRecharge, currency)}</div>
+                  <div className="text-lg font-bold font-mono text-slate-900 truncate">{formatCurrency(realtimeData.distRecharge, currency)}</div>
                 </div>
                 {/* 6. 分销预计实收 */}
                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 flex flex-col justify-center">
                   <div className="text-xs text-slate-500 mb-1 font-medium whitespace-nowrap">分销预计实收</div>
-                  <div className="text-lg font-bold font-mono text-slate-800 truncate">{formatCurrency(realtimeData.distNetRevenue, currency)}</div>
+                  <div className="text-lg font-bold font-mono text-slate-900 truncate">{formatCurrency(realtimeData.distNetRevenue, currency)}</div>
                 </div>
               </div>
             </div>
@@ -1365,32 +1349,35 @@ export default function Dashboard() {
                 <div>
                   <div className="flex items-center gap-2 mb-6">
                     <CreditCard className="w-4 h-4 text-slate-500" />
-                    <h4 className="text-sm font-semibold text-slate-700">支付方式分布</h4>
+                    <h4 className="text-sm font-semibold text-slate-700">充值明细</h4>
                   </div>
-                  <div className="h-64">
+                  <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={appData.payments}
+                          data={appData.rechargeTypes}
                           cx="50%"
                           cy="50%"
                           innerRadius={60}
                           outerRadius={80}
                           paddingAngle={5}
-                          dataKey="value"
+                          dataKey="percentage"
                           nameKey="name"
                         >
-                          {appData.payments.map((entry, index) => (
+                          {appData.rechargeTypes.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
                         <Tooltip 
                           contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                          formatter={(value: number) => [`${value}%`, '占比']}
+                          formatter={(value: number, name: string, props: any) => [
+                            `${value}% (${formatCurrency(props.payload.amount, currency)})`, 
+                            props.payload.name
+                          ]}
                         />
                         <Legend 
                           verticalAlign="bottom" 
-                          height={36}
+                          height={80}
                           iconType="circle"
                           formatter={(value) => <span className="text-[10px] text-slate-600 font-medium">{value}</span>}
                         />
@@ -1531,7 +1518,8 @@ export default function Dashboard() {
                 {[
                   { value: 'all', label: '全部' },
                   { value: 'self', label: '自投' },
-                  { value: 'dist', label: '分销' }
+                  { value: 'dist', label: '分销' },
+                  { value: 'natural', label: '自然' }
                 ].map(opt => (
                   <button
                     key={opt.value}
@@ -1566,7 +1554,7 @@ export default function Dashboard() {
                 <tr>
                   <th className="px-4 py-3 whitespace-nowrap">渠道ID</th>
                   <th className="px-4 py-3 whitespace-nowrap">优化师信息</th>
-                  <th className="px-4 py-3 whitespace-nowrap">平台</th>
+                  <th className="px-4 py-3 whitespace-nowrap">推广媒体</th>
                   <th className="px-4 py-3 whitespace-nowrap">类型</th>
                   <th className="px-4 py-3 whitespace-nowrap">剧名/ID/语言</th>
                   <th className="px-4 py-3 whitespace-nowrap text-right">充值金额/人数</th>
@@ -1594,8 +1582,10 @@ export default function Dashboard() {
                     <td className="px-4 py-3">
                       {item.type === 'self' ? (
                         <span className="inline-flex items-center px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-bold border border-indigo-100 uppercase tracking-wider">自投</span>
-                      ) : (
+                      ) : item.type === 'dist' ? (
                         <span className="inline-flex items-center px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold border border-emerald-100 uppercase tracking-wider">分销</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold border border-slate-200 uppercase tracking-wider">自然</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -1822,6 +1812,40 @@ export default function Dashboard() {
 
             <div className="h-8 w-px bg-slate-200 mx-2"></div>
 
+            {/* Client Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">客户端:</span>
+              <select
+                value={clientFilter}
+                onChange={(e) => setClientFilter(e.target.value)}
+                className="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium rounded px-3 py-1.5 focus:outline-none cursor-pointer hover:bg-slate-200 transition-colors"
+              >
+                <option value="all">全部</option>
+                <option value="ios">iOS端</option>
+                <option value="android">安卓端</option>
+                <option value="h5">H5</option>
+                <option value="miniapp">小程序</option>
+              </select>
+            </div>
+
+            {/* Package Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">应用:</span>
+              <select
+                value={packageFilter}
+                onChange={(e) => setPackageFilter(e.target.value)}
+                className="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium rounded px-3 py-1.5 focus:outline-none cursor-pointer hover:bg-slate-200 transition-colors"
+              >
+                <option value="all">全部</option>
+                <option value="yoo">yoo包</option>
+                <option value="manseen">manseen包</option>
+                <option value="packageA">马甲包A</option>
+                <option value="packageB">马甲包B</option>
+              </select>
+            </div>
+
+            <div className="h-8 w-px bg-slate-200 mx-2"></div>
+
             {/* Section Visibility Dropdown */}
             <div className="relative">
               <button 
@@ -1838,17 +1862,31 @@ export default function Dashboard() {
                     className="fixed inset-0 z-40"
                     onClick={() => setIsVisibilityMenuOpen(false)}
                   />
-                  <div className="absolute top-full left-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-2 z-50">
-                    {Object.entries(sectionNames).map(([id, name]) => (
-                      <label key={id} className="flex items-center gap-2 px-4 py-2 hover:bg-slate-50 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={!hiddenSections.includes(id)}
-                          onChange={() => toggleSectionVisibility(id)}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="text-sm text-slate-700">{name}</span>
-                      </label>
+                  <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-slate-200 py-2 z-50">
+                    {Object.entries(sectionNames).sort((a, b) => {
+                      const orderA = sectionOrder.indexOf(a[0]);
+                      const orderB = sectionOrder.indexOf(b[0]);
+                      if (orderA === -1) return 1;
+                      if (orderB === -1) return -1;
+                      return orderA - orderB;
+                    }).map(([id, name]) => (
+                      <div key={id} className="flex items-center justify-between px-4 py-1.5 hover:bg-slate-50">
+                        <label className="flex items-center gap-2 cursor-pointer flex-grow">
+                          <input 
+                            type="checkbox" 
+                            checked={!hiddenSections.includes(id)}
+                            onChange={() => toggleSectionVisibility(id)}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="text-sm text-slate-700">{name}</span>
+                        </label>
+                        {!hiddenSections.includes(id) && (
+                          <div className="flex gap-1">
+                            <button onClick={() => moveSection(id, 'up')} className="text-slate-400 hover:text-indigo-600 px-1">↑</button>
+                            <button onClick={() => moveSection(id, 'down')} className="text-slate-400 hover:text-indigo-600 px-1">↓</button>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </>
@@ -2018,31 +2056,6 @@ export default function Dashboard() {
                         维度: 注册国家 (Country)、支付方式 (Pay Method)
                       </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section: App Activity */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-1.5 h-6 bg-rose-500 rounded-full"></div>
-                  <h4 className="text-base font-bold text-slate-800 uppercase tracking-wide">应用活跃 (App Activity)</h4>
-                </div>
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="text-xs text-slate-500 mb-3">按应用维度统计的漏斗转化数据：</div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {[
-                      { name: '基础信息', val: '应用名称、客户端' },
-                      { name: '活跃人数', val: '注册 + 登录去重总数' },
-                      { name: '观看人数', val: 'Play事件去重总数' },
-                      { name: '意向转化', val: '意向人数 / 活跃人数' },
-                      { name: '充值转化', val: '充值人数 / 活跃人数' },
-                    ].map((m, i) => (
-                      <div key={i} className="bg-white p-2 rounded border border-slate-100">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">{m.name}</div>
-                        <div className="text-xs text-slate-700 font-medium">{m.val}</div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               </div>
